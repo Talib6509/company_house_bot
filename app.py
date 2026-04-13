@@ -20,6 +20,8 @@ from vdb import cache
 from historydb import history_store
 from data import get_company_details, extract_company_profile, get_filing_history, filter_last_5_years, build_llm_context
 
+import warnings
+warnings.filterwarnings("ignore")
 
 #config
 load_dotenv()
@@ -40,9 +42,9 @@ BASE_URL = "https://api.company-information.service.gov.uk"
 # )
 
 
-#mistral-medium-2505
-llm = ChatWatsonx(
-    model_id="mistral-large-2512",
+#mistral-medium-2505 ...llm = WatsonxLLM(), ChatWatsonx
+llm = WatsonxLLM(
+    model_id="mistralai/mistral-medium-2505",
     url="https://us-south.ml.cloud.ibm.com",
     apikey=IBM_API_KEY,
     project_id=PROJECT_ID,
@@ -125,15 +127,20 @@ You are a retrieval-based QA system.
 - Do NOT include explanations, headings, or extra text.
 - Structure clearly using bullet points if multiple entries exist.
 
+Example 
+User: "When was the company incorporated?"
+Answer: "The company was incorporated on 2014-11-10"
+
 ## CONVERSATION HISTORY
 {history}
 
 ## CONTEXT
 {context}
 
-## QUESTION
+## User
 {question}
-"""
+
+##Answer:"""
 )
 
     prompt = prompt_template.format(
