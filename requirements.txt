@@ -10,3 +10,4 @@ langchain-ibm
 streamlit
 torch 
 torchvision
+langchain-google-genai
