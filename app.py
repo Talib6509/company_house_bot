@@ -13,7 +13,7 @@ from typing import TypedDict
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
 
-from langchain_ibm import WatsonxLLM
+from langchain_ibm import WatsonxLLM, ChatWatsonx
 from ibm_watsonx_ai.metanames import GenTextParamsMetaNames as GenParams
 
 from vdb import cache
@@ -41,7 +41,7 @@ BASE_URL = "https://api.company-information.service.gov.uk"
 
 
 #mistral-medium-2505
-llm = WatsonxLLM(
+llm = ChatWatsonx(
     model_id="mistral-large-2512",
     url="https://us-south.ml.cloud.ibm.com",
     apikey=IBM_API_KEY,
