@@ -1,6 +1,8 @@
 import streamlit as st
 from app import graph
 
+import warnings
+warnings.filterwarnings("ignore")
 
 # -------------------------------
 # HEADER
@@ -59,14 +61,14 @@ else:
     c1, c2 = st.columns(2)
 
     with c1:
-        if st.button("🔄 Reset Company"):
+        if st.button("Reset Company"):
             state.company_number = None
             state.session_id = None
             state.messages = []
             st.rerun()
 
     with c2:
-        if st.button("🧹 Clear Chat"):
+        if st.button("Clear Chat"):
             state.messages = []
             st.rerun()
 
