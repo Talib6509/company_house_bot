@@ -6,6 +6,9 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 import json
 
+import warnings
+warnings.filterwarnings("ignore")
+
 
 #config
 load_dotenv()
