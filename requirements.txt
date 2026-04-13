@@ -1,0 +1,12 @@
+requests
+fastapi
+# google-genai
+python-dotenv
+uvicorn
+langchain
+faiss-cpu
+sentence-transformers
+langchain-ibm
+streamlit
+torch 
+torchvision
