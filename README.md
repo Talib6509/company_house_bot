@@ -10,7 +10,7 @@ A retrieval-based QA system with history and cache feature using:
 
 ## Features Overview
 
-### 1. Company Data Retrieval
+### 1. Company Data Retrieval---(data.py)
 - Fetches company details from Companies House API
 - Extracts structured profile:
   - Overview (name, status, incorporation date)
@@ -21,7 +21,7 @@ A retrieval-based QA system with history and cache feature using:
 - Filing history is fetched and structured
 - Only last **5 years of filings** are used
 
-### 2. LLM (Strict Retrieval QA)
+### 2. LLM (Strict Retrieval QA)---(app.py)
 - Uses IBM Watsonx (`mistral-medium`)
 - Works in **strict retrieval mode**
 - Rules:
@@ -36,7 +36,7 @@ A retrieval-based QA system with history and cache feature using:
   - Accounts, filings, confirmations
   - Time-based queries (e.g. last 3 years)
  
-## ⚡ Cache (Vector DB)
+## ⚡ Cache (Vector DB)---(vdb.py)
 
 ### How it works
 - Uses **semantic similarity search**
@@ -56,7 +56,7 @@ A retrieval-based QA system with history and cache feature using:
 - Similarity threshold: **0.95**
 - Top K results checked: **5**
 
-## History (PostgreSQL)
+## History (PostgreSQL)---(historydb.py)
 
 ### How it works
 - Stores each interaction:
