@@ -1,75 +1,51 @@
-import sqlite3
+import psycopg2
+import os
 from datetime import datetime
+from dotenv import load_dotenv
+load_dotenv()
 
-DB_PATH = "history.db"
-
+def get_conn():
+    return psycopg2.connect(os.getenv("SUPABASE_DB_URL"))
 
 class HistoryStore:
 
-    def __init__(self):
-        self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-        self.create_table()
+    def add(self, user_id,company_number, question, answer):
+        conn = get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO history (user_id, company_number, question, answer, created_at) VALUES (%s, %s, %s, %s, %s)",
+                    (user_id, company_number,question, answer, datetime.utcnow())
+                )
+            conn.commit()
+        finally:
+            conn.close()
 
-    # -------------------------
-    # CREATE TABLE
-    # -------------------------
-    def create_table(self):
-        query = """
-        CREATE TABLE IF NOT EXISTS history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT,
-            question TEXT,
-            answer TEXT,
-            created_at TIMESTAMP
+    def get(self, user_id,company_number, limit=10):
+        conn = get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                SELECT question, answer
+                FROM history
+                WHERE user_id = %s AND company_number = %s
+                ORDER BY id DESC
+                LIMIT %s
+                """,
+                    (user_id, company_number, limit)
+                )
+                rows = cur.fetchall()
+            return list(reversed(rows))
+        finally:
+            conn.close()
+
+    def format(self, user_id, company_number, limit=10):
+        rows = self.get(user_id, company_number, limit)
+
+        return "".join(
+            f"User: {q}\nAssistant: {a}\n"
+            for q, a in rows
         )
-        """
-        self.conn.execute(query)
-        self.conn.commit()
 
-    # -------------------------
-    # ADD MESSAGE
-    # -------------------------
-    def add(self, user_id, question, answer):
-        query = """
-        INSERT INTO history (user_id, question, answer, created_at)
-        VALUES (?, ?, ?, ?)
-        """
-        self.conn.execute(query, (
-            user_id,
-            question,
-            answer,
-            datetime.utcnow()
-        ))
-        self.conn.commit()
-
-    # -------------------------
-    # GET HISTORY
-    # -------------------------
-    def get(self, user_id, limit=15):
-        query = """
-        SELECT question, answer FROM history
-        WHERE user_id = ?
-        ORDER BY id DESC
-        LIMIT ?
-        """
-        cursor = self.conn.execute(query, (user_id, limit))
-        rows = cursor.fetchall()
-
-        return list(reversed(rows))
-
-    # -------------------------
-    # FORMAT FOR LLM
-    # -------------------------
-    def format(self, user_id, limit=6):
-        rows = self.get(user_id, limit)
-
-        text = ""
-        for question, answer in rows:
-            text += f"User: {question}\n"
-            text += f"Assistant: {answer}\n"
-
-        return text
-
-
-# singleton
 history_store = HistoryStore()
