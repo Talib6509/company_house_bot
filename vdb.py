@@ -1,157 +1,99 @@
 import os
-import warnings
-import logging
-
-# ---- Transformers ----
-os.environ["TRANSFORMERS_VERBOSITY"] = "error"
-
-# ---- Python warnings ----
-warnings.filterwarnings("ignore")
-
-# ---- Disable logging globally ----
+import os 
+import warnings 
+import logging 
+import streamlit as st
+# ---- Transformers ---- 
+os.environ["TRANSFORMERS_VERBOSITY"] = "error" 
+# ---- Python warnings ---- 
+warnings.filterwarnings("ignore") 
+# ---- Disable logging globally ---- 
 logging.disable(logging.CRITICAL)
 
 
-import faiss
-import numpy as np
+import hashlib
 from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
-import os
-import pickle
+from upstash_vector import Index
+from dotenv import load_dotenv
+from functools import lru_cache
 
-import warnings
-warnings.filterwarnings("ignore")
 
-# -----------------------------
-# MODEL
-# -----------------------------
-model = SentenceTransformer("all-mpnet-base-v2")
+@st.cache_resource
+def load_model():
+    return SentenceTransformer("all-mpnet-base-v2")
 
+load_dotenv()
+
+model = load_model()
+
+
+@lru_cache(maxsize=256)
 def embed(text):
-    return model.encode(text, normalize_embeddings=True).astype("float32")
+    return model.encode(text, normalize_embeddings=True).tolist()
+
+def make_id(company: str, question: str) -> str:
+    return hashlib.md5(
+        f"{company}:{question.strip().lower()}".encode()
+    ).hexdigest()
+
+index = Index(
+    url=os.getenv("UPSTASH_VECTOR_REST_URL"),
+    token=os.getenv("UPSTASH_VECTOR_REST_TOKEN")
+)
 
 
-# -----------------------------
-# CACHE
-# -----------------------------
-class FaissCache:
+class UpstashVectorCache:
 
-    def __init__(self):
-        self.dim = model.get_embedding_dimension()
-        self._reset()
-        self.load()
-
-    def _reset(self):
-        self.index = faiss.IndexFlatIP(self.dim)
-        self.id_to_data = {}   # faiss_row_id -> {company, question, answer}
-        self.next_id = 0
-
-    # -------------------------
-    def save(self):
-        faiss.write_index(self.index, "faiss.index")
-        with open("meta.pkl", "wb") as f:
-            pickle.dump({
-                "id_to_data": self.id_to_data,
-                "next_id": self.next_id
-            }, f)
-
-    # -------------------------
-    def load(self):
-        index_ok = os.path.exists("faiss.index")
-        meta_ok  = os.path.exists("meta.pkl")
-
-        # Both files must exist and be consistent — otherwise start fresh
-        if not (index_ok and meta_ok):
-            print("[LOAD] Missing files, starting fresh.")
-            return
-
-        index = faiss.read_index("faiss.index")
-
-        if index.d != self.dim:
-            print("[LOAD] Dimension mismatch, starting fresh.")
-            return
-
-        with open("meta.pkl", "rb") as f:
-            data = pickle.load(f)
-
-        # Sanity-check: FAISS vector count must match our metadata count
-        if index.ntotal != data["next_id"]:
-            print(
-                f"[LOAD] ID mismatch: faiss has {index.ntotal} vectors "
-                f"but next_id={data['next_id']}. Starting fresh."
-            )
-            return
-
-        self.index    = index
-        self.id_to_data = data["id_to_data"]
-        self.next_id  = data["next_id"]
-        print(f"[LOAD] Loaded {self.index.ntotal} entries from disk.")
-
-    # -------------------------
     def add(self, company, question, answer):
-        print(f"\n[ADD] company={company!r}  question={question!r}")
-        vec = embed(question).reshape(1, -1)
+        print(f"\nAdding to cache index company={company!r}  question={question!r}")
 
-        self.index.add(vec)                          # FAISS assigns row = next_id
-        self.id_to_data[self.next_id] = {
-            "company":  company,
-            "question": question,
-            "answer":   answer
-        }
-        self.next_id += 1
-        self.save()
-        print(f"[ADD] Cache now has {self.index.ntotal} entries.")
+        vec = embed(question)
+        vector_id = make_id(company, question)
 
-    # -------------------------
-    def search(self, company, query, threshold=0.75, top_k=5):
-        if self.index.ntotal == 0:
-            print("[SEARCH] Index is empty.")
+        index.upsert(
+            namespace=company,
+            vectors=[{
+                "id":       vector_id,
+                "vector":   vec,
+                "metadata": {
+                    "question":      question,
+                    "question_norm": question.strip().lower(),
+                    "answer":        answer
+                }
+            }]
+        )
+
+    def search(self, company, query, threshold=0.95, top_k=5):
+        print(f"\nSearching in cache vector: query={query!r}  company={company!r}")
+
+        vec = embed(query)
+
+        results = index.query(
+            namespace=company,
+            vector=vec,
+            top_k=top_k,
+            include_metadata=True
+        )
+
+        if not results:
+            print("SEARCH No results returned.")
             return None
 
-        q = embed(query).reshape(1, -1)
+        for result in results:
+            score = result.score
+            meta  = result.metadata
 
-        # Fetch enough results to have top_k hits after company filtering
-        fetch_k = min(self.index.ntotal, top_k * 10)
-        D, I = self.index.search(q, fetch_k)
+            print(f"  score={score:.4f}  question_norm={meta.get('question_norm')!r}")
 
-        print(f"\n[SEARCH] query={query!r}  company={company!r}")
-        print(f"[SEARCH] Raw FAISS results (idx, score):")
+            if score >= threshold:
+                print(f"SEARCH: Cache hit! score={score:.4f}")
+                return {
+                    "answer": meta["answer"],
+                    "score":  float(score)
+                }
 
-        best_score, best_id = -1, None
-
-        for score, idx in zip(D[0], I[0]):
-            if idx == -1:
-                continue
-
-            data = self.id_to_data.get(idx)
-            if data is None:
-                # This would indicate the ID sync bug — log it clearly
-                print(f"  idx={idx}  score={score:.4f}  !! NOT IN id_to_data !!")
-                continue
-
-            print(f"  idx={idx}  score={score:.4f}  company={data['company']!r}"
-                  f"  q={data['question']!r}")
-
-            if data["company"] != company:
-                continue
-
-            if score > best_score:
-                best_score, best_id = score, idx
-
-        if best_id is None:
-            print("[SEARCH] No candidates after company filter.")
-            return None
-
-        print(f"[SEARCH] Best match: score={best_score:.4f}  threshold={threshold}")
-
-        if best_score >= threshold:
-            return {
-                "answer": self.id_to_data[best_id]["answer"],
-                "score":  float(best_score)
-            }
-
-        print("[SEARCH] Below threshold — cache miss.")
+        print("SEARCH: Cache miss.")
         return None
 
 
-cache = FaissCache()
+cache = UpstashVectorCache()
