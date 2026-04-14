@@ -45,7 +45,10 @@ index = Index(
 class UpstashVectorCache:
 
     def add(self, company, question, answer):
+        print("---------------------------------------------------------------")
         print(f"\nAdding to cache index company={company!r}  question={question!r}")
+        print("---------------------------------------------------------------")
+
 
         vec = embed(question)
         vector_id = make_id(company, question)
@@ -64,7 +67,10 @@ class UpstashVectorCache:
         )
 
     def search(self, company, query, threshold=0.95, top_k=5):
+        print("---------------------------------------------------------------")
         print(f"\nSearching in cache vector: query={query!r}  company={company!r}")
+        print("---------------------------------------------------------------")
+
 
         vec = embed(query)
 
@@ -86,7 +92,7 @@ class UpstashVectorCache:
             print(f"  score={score:.4f}  question_norm={meta.get('question_norm')!r}")
 
             if score >= threshold:
-                print(f"SEARCH: Cache hit! score={score:.4f}")
+                # print(f"SEARCH: Cache hit! score={score:.4f}")
                 return {
                     "answer": meta["answer"],
                     "score":  float(score)
