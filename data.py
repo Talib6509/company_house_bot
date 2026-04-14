@@ -67,7 +67,10 @@ EVENT_TYPE_MAP = {
 # first api call to fetch company details
 def get_company_details(company_number):
     url = f"{BASE_URL}/company/{company_number}"
+    print("---------------------------------------------------------------")
     print(f"\nFetching company details for {company_number}...")
+    print("---------------------------------------------------------------")
+
     response = requests.get(url, auth=(API_KEY, ""))
     if response.status_code == 200:
         data = response.json()
@@ -91,6 +94,10 @@ def extract_company_profile(details):
     # Address
     address_data = details.get("registered_office_address", {})
     address = ", ".join([v for v in address_data.values() if v]) if address_data else "N/A"
+    address_in_dispute      = details.get("registered_office_is_in_dispute", False)
+    address_undeliverable   = details.get("undeliverable_registered_office_address", False)
+
+
 
     # Accounts
     accounts = details.get("accounts", {})
@@ -102,12 +109,14 @@ def extract_company_profile(details):
         last_accounts_summary = (
             f"Last accounts ({last_accounts.get('type', 'unknown')}): "
             f"{last_accounts.get('period_start_on', 'N/A')} → {last_accounts.get('period_end_on', 'N/A')}"
+            f"(made up to {last_accounts.get('made_up_to', 'N/A')})"
         )
 
     next_accounts_summary = None
     if next_accounts:
         next_accounts_summary = (
             f"Next accounts due on {next_accounts.get('due_on', 'N/A')} "
+            f"for period {next_accounts.get('period_start_on', 'N/A')} → {next_accounts.get('period_end_on', 'N/A')} "
             f"(Overdue: {next_accounts.get('overdue', False)})"
         )
 
@@ -116,8 +125,10 @@ def extract_company_profile(details):
     confirmation_summary = None
     if confirmation:
         confirmation_summary = (
-            f"Confirmation statement due on {confirmation.get('next_due', 'N/A')} "
-            f"(Overdue: {confirmation.get('overdue', False)})"
+            f"Last filed: {confirmation.get('last_made_up_to', 'N/A')}. "
+            f"Next due: {confirmation.get('next_due', 'N/A')} "
+            f"(made up to {confirmation.get('next_made_up_to', 'N/A')}, "
+            f"Overdue: {confirmation.get('overdue', False)})"
         )
 
     # Compliance
@@ -132,6 +143,9 @@ def extract_company_profile(details):
     # Previous names
     prev_names = details.get("previous_company_names", [])
 
+    last_members_list = details.get("last_full_members_list_date", "N/A")
+
+
 
     can_file= details.get("can_file", False)
 
@@ -142,11 +156,16 @@ def extract_company_profile(details):
         f"its current status is '{status}'."
     )
 
-    profile["address"] = f"Registered office: {address}"
+    profile["address"] = {
+        "registered_office":    address,
+        "in_dispute":           address_in_dispute,
+        "undeliverable":        address_undeliverable
+    }
 
     profile["financials"] = {
         "last_accounts": last_accounts_summary,
         "next_accounts": next_accounts_summary,
+        "last_members_list":    last_members_list
     }
 
     profile["compliance"] = {
@@ -261,7 +280,10 @@ def interpret_filing_structured(item):
 
 def get_filing_history(company_number):
     url = f"{BASE_URL}/company/{company_number}/filing-history"
+    print("---------------------------------------------------------------")
     print(f"\nFetching filing history for {company_number}...")
+    print("---------------------------------------------------------------")
+
 
     response = requests.get(url, auth=(API_KEY, ""))
 
@@ -287,7 +309,8 @@ def get_filing_history(company_number):
 # 3. Filter Last 5 Years
 # -------------------------------
 def filter_last_5_years(filing_data):
-    print("\nFiltering last 5 years of filings...")
+
+    # print("\nFiltering last 5 years of filings...")
 
     cutoff = datetime.now() - timedelta(days=5*365)
     filings = filing_data.get("events", [])
@@ -308,6 +331,7 @@ def filter_last_5_years(filing_data):
         grouped[event_type].append({
             "date": f.get("date"),
             "action_date": f.get("action_date"),
+            "category": f.get("category"),
             "details": f.get("details"),
             "raw_type": f.get("raw_type")
         })
@@ -327,13 +351,14 @@ def filter_last_5_years(filing_data):
         }
 
     print(f"Found {len(filtered)} filings in last 5 years\n")
+    print("---------------------------------------------------------------")
     return {
     "summary": result,
     "events": filtered
     }
 
 def build_llm_context(profile, filings):
-    print("\nBuilding LLM context...")
+    # print("\nBuilding LLM context...")
 
     # ---- Company Profile ----
     profile_text = "Company Profile:\n"
