@@ -1,3 +1,4 @@
+from sentence_transformers import SentenceTransformer
 import streamlit as st
 from app import graph
 
@@ -14,6 +15,7 @@ with col1:
 
 with col2:
     st.title("Company Intelligence Chat")
+
 
 
 # -------------------------------
