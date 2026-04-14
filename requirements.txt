@@ -11,4 +11,4 @@ torch
 torchvision
 langchain-google-genai
 upstash-vector
-psycopg2
+psycopg2-binary
