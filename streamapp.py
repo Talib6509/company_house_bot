@@ -14,7 +14,7 @@ with col1:
     st.image("logo.png", width=80)
 
 with col2:
-    st.title("Company Intelligence Chat")
+    st.title("Companies House Chat")
 
 
 
