@@ -79,6 +79,8 @@ class GraphState(TypedDict):
 
 
 # Helpers
+current_date = datetime.utcnow().strftime("%Y-%m-%d")
+
 def route(state):
     return "cached" if state.get("cache_hit") else "retrieval"
 
@@ -109,27 +111,99 @@ You are a retrieval-based QA system.
 - Only extract and organize existing data.
 
 ## FILING-SPECIFIC INSTRUCTIONS
+
+### Director-related questions
 - If the question is about director changes, you MUST include ALL relevant filings:
   - AP01 (Director appointment)
   - TM01 (Director termination)
   - CH01 (Director details change)
-- Include:
-  - officer_name
-  - relevant date (appointment/termination/change)
-  - filed date (if available)
 
-- Similarly, for other filing types:
-  - Extract ALL entries of that type from context
-  - Include full details (dates, values, type)
+- You MUST:
+  - Count number of filings per type
+  - Include ALL entries
+  - Include:
+    - officer_name (if available)
+    - relevant date (appointment_date / termination_date / change_date)
+    - filed date (date field)
+
+- If values are null → do NOT invent values
+
+---
+
+### Other filing types (e.g., accounts, confirmation statements)
+- Extract ALL entries of that type
+- Include:
+  - total count
+  - filed date (date)
+  - action_date (if available)
+  - details (e.g., accounts_type, made_up_to)
+
+---
 
 ## RESPONSE FORMAT (STRICT)
 - Return ONLY the answer.
-- Do NOT include explanations, headings, or extra text.
-- Structure clearly using bullet points if multiple entries exist.
+- Do NOT include headings, or extra text.
+- Use clear structured sentences.
+- Use bullet points ONLY if multiple entries exist.
 
-Example 
+---
+## CURRENT DATE
+{current_date}
+
+## TIME-BASED QUESTIONS
+- If the question includes a time range (e.g., "last 3 years", "last 5 years"):
+  - Calculate the start date using CURRENT DATE.
+  - Example:
+    - CURRENT DATE = 2025-03-31
+    - "last 3 years" → from 2022-03-31 onwards
+
+- Filter filings using:
+  - action_date (if available)
+  - otherwise use date
+
+- Only include entries within the time range.
+
+- Counts MUST reflect only filtered entries.
+
+- If no entries exist in that range, return EXACTLY:
+  "Company data does not have this information"
+---
+## EXAMPLES
+
+### Example 1 — Simple fact
 User: "When was the company incorporated?"
 Answer: "The company was incorporated on 2014-11-10"
+
+---
+
+### Example 2 — Director changes
+User: "How many times did the company change its directors?"
+
+Answer:
+The company has filed director change (CH01) 2 times:
+- Filed on 2025-01-27
+- Filed on 2025-01-31
+
+The company has filed director appointments (AP01) 2 times:
+- Mr Yaroslav Kinebas was appointed on 2025-01-23 (filed on 2025-02-07)
+- Azra Nasir was appointed on 2025-01-23 (filed on 2025-01-27)
+
+The company has filed director terminations (TM01) 3 times:
+- Andrew Adams terminated on 2025-01-24 (filed on 2025-01-28)
+- Simon Mark Telling terminated on 2025-01-24 (filed on 2025-01-28)
+- Naveed Akram terminated on 2025-01-24 (filed on 2025-01-28)
+
+---
+
+### Example 3 — Accounts filed
+User: "When were the accounts filed?"
+
+Answer:
+The company has filed accounts 2 times:
+- Small accounts made up to 2025-03-31 (filed on 2025-09-19)
+- Small accounts made up to 2024-03-31 (filed on 2024-11-07)
+
+---
 
 ## CONVERSATION HISTORY
 {history}
@@ -140,7 +214,8 @@ Answer: "The company was incorporated on 2014-11-10"
 ## User
 {question}
 
-##Answer:"""
+## Answer:
+"""
 )
 
     prompt = prompt_template.format(
@@ -155,7 +230,7 @@ Answer: "The company was incorporated on 2014-11-10"
 def memory_node(state: GraphState):
     print(f"User: {state['session_id']}")
 
-    history = history_store.format(state["session_id"])
+    history = history_store.format(state["session_id"], state["company_number"])
 
     return {**state, "history": history}
 
@@ -170,14 +245,11 @@ def cache_node(state: GraphState):
     )
 
     if result:
-        print("CACHE HIT\n")
         return {
             **state,
             "answer": result["answer"],
             "cache_hit": True
         }
-
-    print("CACHE MISS\n")
     return {
         **state,
         "cache_hit": False
@@ -187,7 +259,6 @@ def cache_node(state: GraphState):
 def retrieval_node(state: GraphState):
     company_data = get_company_details(state["company_number"])
     if not company_data:
-        print("Company not found")
         return {
             **state,
             "answer": "Company number not found",
@@ -215,13 +286,13 @@ def context_node(state: GraphState):
 # 5. LLM NODE
 def llm_node(state: GraphState):
 
-    print(f"History given to LLM:\n{state['history']}\n")
+    print(f"\nHistory given to LLM:\n{state['history']}\n")
     response = llm.invoke(build_prompt(state["context"], state["question"], state["history"]))
 
     response = response.strip() if isinstance(response, str) else response.content.strip()
 
-    # fro gemini response.content
-    print(f"LLM Response: {response}\n")
+    # # fro gemini response.content
+    # print(f"LLM Response: {response}\n")
 
     cache.add(
         state["company_number"],
@@ -244,6 +315,7 @@ def memory_save_node(state: GraphState):
 
     history_store.add(
         state["session_id"],
+        state["company_number"],
         state["question"],
         state["answer"]
     )
