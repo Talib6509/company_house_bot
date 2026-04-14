@@ -50,7 +50,7 @@ llm = WatsonxLLM(
     project_id=PROJECT_ID,
     params={
         GenParams.MAX_NEW_TOKENS: 3000,
-        GenParams.TEMPERATURE: 0,
+        GenParams.TEMPERATURE: 0.3,
     },
 )
 
