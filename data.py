@@ -16,55 +16,64 @@ load_dotenv()
 API_KEY = os.getenv("API_KEY")
 BASE_URL = "https://api.company-information.service.gov.uk"
 
-
-FILING_TYPE_MAP = {
+EVENT_TYPE_MAP = {
     # ---- Accounts ----
-    "AA": "Accounts filing",
+    "AA": "accounts_filed",
+    "AA01": "accounts_amended",
+    "AA02": "accounts_amended",
 
     # ---- Confirmation ----
-    "CS01": "Confirmation statement",
+    "CS01": "confirmation_statement_filed",
 
     # ---- Directors ----
-    "AP01": "Director appointment",
-    "TM01": "Director termination",
-    "CH01": "Director details change",
+    "AP01": "director_appointment",
+    "TM01": "director_termination",
+    "CH01": "director_change",
 
     # ---- Secretaries ----
-    "AP03": "Secretary appointment",
-    "TM02": "Secretary termination",
-    "CH03": "Secretary details change",
-    "CH04": "Corporate secretary change",
+    "AP03": "secretary_appointment",
+    "TM02": "secretary_termination",
+    "CH03": "secretary_change",
+    "CH04": "corporate_secretary_change",
 
     # ---- Charges ----
-    "MR01": "Charge creation",
-    "MR02": "Charge satisfaction",
-    "MR04": "Charge statement update",
+    "MR01": "charge_created",
+    "MR02": "charge_satisfied",
+    "MR04": "charge_updated",
 
-    # ---- Incorporation ----
-    "IN01": "Company incorporation",
-    "MA": "Memorandum & Articles",
+    # ---- Shares ----
+    "SH01": "share_allotment",
+    "SH02": "share_consolidation",
+
+    # ---- PSC ----
+    "PSC01": "psc_added",
+    "PSC02": "psc_updated",
+    "PSC03": "psc_removed",
+
+    # ---- Incorporation / Docs ----
+    "IN01": "company_incorporation",
+    "MA": "articles_of_association",
 
     # ---- Address ----
-    "AD01": "Registered office address change",
+    "AD01": "address_change",
 
-    # ---- PSC (Ownership) ----
-    "PSC01": "PSC notification",
-    "PSC02": "PSC update",
-    "PSC03": "PSC ceased",
+    # ---- Name change ----
+    "NM01": "company_name_change",
 
-    # ---- Misc ----
-    "SH01": "Share allotment",
-    "SH02": "Share consolidation",
+    # ---- Liquidation ----
+    "LIQ01": "liquidation_event",
+    "LIQ02": "liquidation_event",
 }
 
 
 # first api call to fetch company details
 def get_company_details(company_number):
     url = f"{BASE_URL}/company/{company_number}"
+    print(f"\nFetching company details for {company_number}...")
     response = requests.get(url, auth=(API_KEY, ""))
     if response.status_code == 200:
         data = response.json()
-        print(f"Company details: {data}")
+        # print(f"Company details: {data}")
         return data
     else:
         print("[ERROR]", response.status_code, response.text)
@@ -199,7 +208,7 @@ def interpret_filing_structured(item):
     action_date = item.get("action_date")
 
     event = {
-        "event_type": "unknown",
+        "event_type": EVENT_TYPE_MAP.get(type_code, f"other_{type_code}"),
         "category": category,
         "date": date,
         "action_date": action_date,
@@ -208,80 +217,45 @@ def interpret_filing_structured(item):
     }
 
     # -------------------------
-    # Accounts
+    # Enrich details (only where useful)
     # -------------------------
-    if type_code == "AA":
-        event["event_type"] = "accounts_filed"
+
+    # Accounts
+    if type_code in ["AA", "AA01", "AA02"]:
+        event["details"]["made_up_to"] = values.get("made_up_date")
 
         if "full" in desc:
             event["details"]["accounts_type"] = "full"
         elif "small" in desc:
             event["details"]["accounts_type"] = "small"
-        else:
-            event["details"]["accounts_type"] = "unknown"
 
-        event["details"]["made_up_to"] = values.get("made_up_date")
-
-    # -------------------------
-    # Confirmation Statement
-    # -------------------------
+    # Confirmation
     elif type_code == "CS01":
-        event["event_type"] = "confirmation_statement_filed"
         event["details"]["made_up_to"] = values.get("made_up_date")
 
-    # -------------------------
-    # Director Appointment
-    # -------------------------
-    elif type_code == "AP01":
-        event["event_type"] = "director_appointment"
-        event["details"] = {
-            "officer_name": values.get("officer_name"),
-            "appointment_date": values.get("appointment_date")
-        }
+    # Director / Secretary events
+    elif type_code in ["AP01", "TM01", "CH01", "AP03", "TM02", "CH03", "CH04"]:
+        event["details"]["officer_name"] = values.get("officer_name")
+        event["details"]["date"] = (
+            values.get("appointment_date")
+            or values.get("termination_date")
+            or values.get("change_date")
+        )
 
-    # -------------------------
-    # Director Termination
-    # -------------------------
-    elif type_code == "TM01":
-        event["event_type"] = "director_termination"
-        event["details"] = {
-            "officer_name": values.get("officer_name"),
-            "termination_date": values.get("termination_date")
-        }
+    # Shares
+    elif type_code == "SH01":
+        event["details"]["shares"] = values.get("shares")
 
-    # -------------------------
-    # Director Change
-    # -------------------------
-    elif type_code == "CH01":
-        event["event_type"] = "director_change"
-        event["details"] = {
-            "officer_name": values.get("officer_name"),
-            "change_date": values.get("change_date")
-        }
+    # PSC
+    elif type_code in ["PSC01", "PSC02", "PSC03"]:
+        event["details"]["psc_name"] = values.get("name")
 
-    # -------------------------
-    # Address Change
-    # -------------------------
-    elif type_code == "AD01":
-        event["event_type"] = "address_change"
+    # Charges
+    elif type_code in ["MR01", "MR02", "MR04"]:
+        event["details"]["charge_number"] = values.get("charge_number")
 
-    # -------------------------
-    # Charge Creation
-    # -------------------------
-    elif type_code == "MR01":
-        event["event_type"] = "charge_created"
-
-    # -------------------------
-    # Charge Satisfaction
-    # -------------------------
-    elif type_code == "MR02":
-        event["event_type"] = "charge_satisfied"
-
-    # -------------------------
-    # Fallback
-    # -------------------------
-    else:
-        event["event_type"] = "other"
+    # Fallback (keep description ALWAYS)
+    if not event["details"]:
         event["details"]["description"] = desc
 
     return event
@@ -289,7 +263,7 @@ def interpret_filing_structured(item):
 
 def get_filing_history(company_number):
     url = f"{BASE_URL}/company/{company_number}/filing-history"
-    print(f"\n[STEP 2] Fetching filing history for {company_number}...")
+    print(f"\nFetching filing history for {company_number}...")
 
     response = requests.get(url, auth=(API_KEY, ""))
 
@@ -315,7 +289,7 @@ def get_filing_history(company_number):
 # 3. Filter Last 5 Years
 # -------------------------------
 def filter_last_5_years(filing_data):
-    print("\n[STEP 3] Filtering last 5 years of filings...")
+    print("\nFiltering last 5 years of filings...")
 
     cutoff = datetime.now() - timedelta(days=5*365)
     filings = filing_data.get("events", [])
@@ -354,14 +328,14 @@ def filter_last_5_years(filing_data):
             "details": items
         }
 
-    print(f"[SUCCESS] {len(filtered)} filings in last 5 years\n")
+    print(f"Found {len(filtered)} filings in last 5 years\n")
     return {
     "summary": result,
     "events": filtered
     }
 
 def build_llm_context(profile, filings):
-    print("\n[STEP 6] Building LLM context...")
+    print("\nBuilding LLM context...")
 
     # ---- Company Profile ----
     profile_text = "Company Profile:\n"
@@ -389,7 +363,6 @@ def build_llm_context(profile, filings):
 
     context = profile_text + filings_text
 
-    print("[SUCCESS] LLM context created\n")
-    print(context)
+    # print(f"\nContext given to LLM:\n{context}")
 
     return context
