@@ -1,10 +1,10 @@
-# company_house_bot
+# Company house bot
 A chat bot build on data from company house uk
 
 A retrieval-based QA system with history and cache feature using:
 - LangGraph (workflow orchestration)
 - IBM Watsonx (LLM)
-- Upstash Vector DB (semantic cache)
+- Upstash Vector DB (semantic cache )
 - PostgreSQL (history)
 - Streamlit (UI)
 
@@ -88,4 +88,66 @@ A retrieval-based QA system with history and cache feature using:
 
 - If the same user comes back with the **same company_number**:
   - Previous conversation history is **retrieved and reused**
+
+## How to Run
+### 1. Clone Repository
+
+    git clone <your-repo-url>
+    cd <repo-folder>
+
+---
+
+### 2. Create Virtual Environment
+
+    python -m venv venv
+    source venv/bin/activate     
+---
+
+### 3. Install Dependencies
+
+    pip install -r requirements.txt
+
+---
+
+### 4. Setup Environment Variables
+
+Create `.env` file:
+
+    API_KEY=your_company_house_api_key
+    ibm_key=your_ibm_api_key
+    project_id=your_project_id
+    gemini_key=your_gemini_key
+    UPSTASH_VECTOR_REST_URL=your_url
+    UPSTASH_VECTOR_REST_TOKEN=your_token
+    SUPABASE_DB_URL=your_db_connection_string
+
+---
+
+### 5. Setup Database
+
+    CREATE TABLE IF NOT EXISTS history (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT,
+        company_number TEXT,
+        question TEXT,
+        answer TEXT,
+        created_at TIMESTAMP
+    );
+
+---
+
+### 6. Run Application
+
+    streamlit run streamapp.py
+
+---
+
+### 7. Usage Flow
+
+1. Enter company number  
+2. Enter user ID  
+3. Ask questions  
+
+---
+
 
