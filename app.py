@@ -228,7 +228,7 @@ The company has filed accounts 2 times:
 # NODES
 # 1. MEMORY NODE
 def memory_node(state: GraphState):
-    print(f"User: {state['session_id']}")
+    # print(f"User: {state['session_id']}")
 
     history = history_store.format(state["session_id"], state["company_number"])
 
@@ -237,7 +237,10 @@ def memory_node(state: GraphState):
 
 #cache node
 def cache_node(state: GraphState):
+    print("---------------------------------------------------------------")
     print("\nChecking cache...\n")
+    print("---------------------------------------------------------------")
+
 
     result = cache.search(
         company=state["company_number"],
@@ -285,8 +288,14 @@ def context_node(state: GraphState):
 
 # 5. LLM NODE
 def llm_node(state: GraphState):
-
+    print("---------------------------------------------------------------")
     print(f"\nHistory given to LLM:\n{state['history']}\n")
+    print("---------------------------------------------------------------")
+    print("---------------------------------------------------------------")
+    print(f"\nContext given to LLM:\n{state['context']}\n")
+    print("---------------------------------------------------------------")
+
+
     response = llm.invoke(build_prompt(state["context"], state["question"], state["history"]))
 
     response = response.strip() if isinstance(response, str) else response.content.strip()
